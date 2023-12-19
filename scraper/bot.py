@@ -1,3 +1,4 @@
+import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -192,18 +193,19 @@ class AutotraderMainBot:
         self.driver.quit()
 
     def test_listing(self):
-        listing_page = 'https://www.autotrader.ca/a/bmw/4%20series/langley/british%20columbia/5_60855243_20110808063216984/?showcpo=ShowCpo&ncse=no&ursrc=xpl&urp=1&urm=8&sprx=-2'
+        listing_page = 'https://www.autotrader.ca/a/ford/f-150/kelowna/british%20columbia/19_12734864_/?showcpo=ShowCpo&ncse=no&ursrc=pl&urp=3&urm=8&sprx=-2'
         css_selector = '#specificationWidget'
+        id_selector = 'wrapper'
         self.driver.get(listing_page)
         while True:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
             )
 
-            main_div = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-            html_content = main_div.get_attribute('outerHTML')
+            specs_div = self.driver.find_element(By.CSS_SELECTOR, css_selector)
+            specs_div_content = specs_div.get_attribute('outerHTML')
 
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = BeautifulSoup(specs_div_content, 'html.parser')
             specs_list = soup.find('ul', {'id': 'sl-card-body'})
             
             specs_dict = {}
@@ -211,12 +213,18 @@ class AutotraderMainBot:
             for index, li in enumerate(specs_list.find_all('li', {'class': 'list-item'})):
                 key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
                 specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
+
+            wrapper = self.driver.find_element(By.ID, id_selector)
+            script = wrapper.find_elements(By.XPATH, './/script[@type="text/javascript"]')[1]
+            script_content = script.get_attribute('innerHTML')
+            vin_match = re.search(r'"vin":"([^"]*)"', script_content)
+            specs_dict["VIN"] = vin_match.group(1) if vin_match else None
             
             for key, value in specs_dict.items():
                 print(f'{key}: {value}')
             
-            with open('sample_listing_source.html', 'w') as f:
-                f.write(main_div.get_attribute('outerHTML') + '\n')
+            # with open('sample_listing_source.html', 'w') as f:
+            #     f.write(self.driver.page_source)
             
             break
         self.driver.quit()
