@@ -200,43 +200,38 @@ class AutotraderMainBot:
 
         self.driver.quit()
 
-    def scrape_listing(self, url=None):
+    def extract_listing_info(self, url=None):
         if not url:
             url = "https://www.autotrader.ca/a/toyota/tundra/vernon/british%20columbia/19_12736412_/?showcpo=ShowCpo&ncse=no&ursrc=pl&urp=5&urm=8&sprx=-2"
-        css_selector = '#sl-card-body'
-        id_selector = 'wrapper'
+
+        specs_dict = {}
+
         self.driver.get(url)
-        while True:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
-            )
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR))
+        )
 
-            specs_div = self.driver.find_element(By.CSS_SELECTOR, css_selector)
-            specs_div_content = specs_div.get_attribute('outerHTML')
+        specs_div = self.driver.find_element(By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR)
+        specs_div_content = specs_div.get_attribute('outerHTML')
+        specs_list = BeautifulSoup(specs_div_content, 'html.parser')
 
-            specs_list = BeautifulSoup(specs_div_content, 'html.parser')
-            specs_dict = {}
+        for index, li in enumerate(specs_list.find_all('li', {'class': 'list-item'})):
+            key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
+            specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
 
-            for index, li in enumerate(specs_list.find_all('li', {'class': 'list-item'})):
-                key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
-                specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
+        wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
+        script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
+        script_content = script.get_attribute('innerHTML')
+        vin_match = re.search(r'"vin":"([^"]*)"', script_content)
+        specs_dict["VIN"] = vin_match.group(1) if vin_match else None
+        return specs_dict
 
-            wrapper = self.driver.find_element(By.ID, id_selector)
-            script = wrapper.find_elements(By.XPATH, './/script[@type="text/javascript"]')[1]
-            script_content = script.get_attribute('innerHTML')
-            vin_match = re.search(r'"vin":"([^"]*)"', script_content)
-            specs_dict["VIN"] = vin_match.group(1) if vin_match else None
-
-            self.output_listing_csv(specs_dict)
-            
-            break
-        self.driver.quit()
         
 
 def main():
     bot = AutotraderMainBot()
-    # bot.run(pages = 2)
-    bot.scrape_listing()
+    bot.run(pages = 2)
+    # bot.extract_listing_info()
 
 
 if __name__ == "__main__":
