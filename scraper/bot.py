@@ -38,7 +38,14 @@ class AutotraderMainBot:
             'listing_url': ('.inner-link', 'href'),
             'dealer_name': ('div.seller-name', 'text')
         }
-    LISTING_BASIC_INFO_FIELDS = ["make", "model", "year", "price", "vin", "dealerCoName"]
+    LISTING_BASIC_INFO_FIELDS = {
+        "price": "original price",
+        "make": "make",
+        "model": "model",
+        "year": "year", 
+        "vin": "vin", 
+        "dealerCoName": "dealer", 
+    }
     LISTING_SPECS_FIELDS = ["Kilometres", "Status", "Trim", "Body Type", "Engine", "Cylinder", "Transmission", "Drivetrain", "Stock Number", "Exterior Colour", "Interior Colour", "Passengers", "Doors", "Fuel Type", "City Fuel Economy", "Hwy Fuel Economy"]
     
     def __init__(self, user_agent=USER_AGENT):
@@ -223,6 +230,7 @@ class AutotraderMainBot:
             url = "https://www.autotrader.ca/a/volkswagen/atlas%20cross%20sport/kelowna/british%20columbia/5_54065092_ct2004120103526706/?showcpo=ShowCpo&ncse=no&ursrc=hl&orup=34000_100_34162&sprx=-2,Turner"
         
         info_dict = {}
+        info_dict['url'] = url
 
         try:
             self.driver.get(url)
@@ -232,7 +240,26 @@ class AutotraderMainBot:
         except Exception as e:
             print("Failed to load listing page ", url)
             return None
+        
+        # Extract basic info
+        try:
+            wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
+            script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
+            script_content = script.get_attribute('innerHTML')
+            adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
+            adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
+            adBasicInfo = json.loads(adBasicInfo)
+            for key, value in self.LISTING_BASIC_INFO_FIELDS.items():
+                info_dict[value] = adBasicInfo.get(key, None)
+                if key == 'price':
+                    info_dict['lowest price'] = info_dict[value]
+        except:
+            for key, value in self.LISTING_BASIC_INFO_FIELDS.items():
+                info_dict[value] = None
+                if key == 'price':
+                    info_dict['lowest price'] = None
 
+        # Extract other specs
         specs_div = self.driver.find_element(By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR)
         specs_div_content = specs_div.get_attribute('outerHTML')
         specs_list = BeautifulSoup(specs_div_content, 'html.parser')
@@ -243,29 +270,16 @@ class AutotraderMainBot:
             specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
 
         for field in self.LISTING_SPECS_FIELDS:
-            info_dict[field] = specs_dict.get(field, None)
-
-        try:
-            wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
-            script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
-            script_content = script.get_attribute('innerHTML')
-            adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
-            adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
-            adBasicInfo = json.loads(adBasicInfo)
-            for field in self.LISTING_BASIC_INFO_FIELDS:
-                info_dict[field] = adBasicInfo.get(field, None)
-        except:
-            for field in self.LISTING_BASIC_INFO_FIELDS:
-                info_dict[field] = None
-        
+            info_dict[field.lower()] = specs_dict.get(field, None)
+        self.output_listing_csv(info_dict)
         return info_dict
 
         
 
 def main():
     bot = AutotraderMainBot()
-    bot.run(pages = 1)
-    # bot.extract_listing_info()
+    # bot.run(pages = 1)
+    bot.extract_listing_info()
 
 
 if __name__ == "__main__":
