@@ -38,6 +38,7 @@ class AutotraderMainBot:
             'listing_url': ('.inner-link', 'href'),
             'dealer_name': ('div.seller-name', 'text')
         }
+    LISTING_FIELDS = ["make", "model", "year", "price", "vin", "dealerCoName"]
     
     def __init__(self, user_agent=USER_AGENT):
         # initialize options
@@ -142,8 +143,8 @@ class AutotraderMainBot:
                     continue
                 else:
                     listing_info = self.extract_listing_info(listing_url)
-                    listing_info['price'] = listing['price']
-                    self.output_listing_csv(listing_info)
+                    if listing_info:
+                        self.output_listing_csv(listing_info)
 
             self.driver.get(snapshot_url)
 
@@ -216,10 +217,14 @@ class AutotraderMainBot:
 
         specs_dict = {}
 
-        self.driver.get(url)
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR))
-        )
+        try:
+            self.driver.get(url)
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR))
+            )
+        except Exception as e:
+            print("Failed to load listing page ", url)
+            return None
 
         specs_div = self.driver.find_element(By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR)
         specs_div_content = specs_div.get_attribute('outerHTML')
@@ -232,8 +237,11 @@ class AutotraderMainBot:
         wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
         script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
         script_content = script.get_attribute('innerHTML')
-        vin_match = re.search(r'"vin":"([^"]*)"', script_content)
-        specs_dict["VIN"] = vin_match.group(1) if vin_match else None
+        adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
+        adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
+        adBasicInfo = json.loads(adBasicInfo)
+        for field in self.LISTING_FIELDS:
+            specs_dict[field] = adBasicInfo.get(field, None)
         return specs_dict
 
         
