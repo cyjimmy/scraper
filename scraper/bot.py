@@ -38,7 +38,8 @@ class AutotraderMainBot:
             'listing_url': ('.inner-link', 'href'),
             'dealer_name': ('div.seller-name', 'text')
         }
-    LISTING_FIELDS = ["make", "model", "year", "price", "vin", "dealerCoName"]
+    LISTING_BASIC_INFO_FIELDS = ["make", "model", "year", "price", "vin", "dealerCoName"]
+    LISTING_SPECS_FIELDS = ["Kilometres", "Status", "Trim", "Body Type", "Engine", "Cylinder", "Transmission", "Drivetrain", "Stock Number", "Exterior Colour", "Interior Colour", "Passengers", "Doors", "Fuel Type", "City Fuel Economy", "Hwy Fuel Economy"]
     
     def __init__(self, user_agent=USER_AGENT):
         # initialize options
@@ -213,10 +214,10 @@ class AutotraderMainBot:
 
     def extract_listing_info(self, url=None):
         if not url:
-            url = "https://www.autotrader.ca/a/toyota/tundra/vernon/british%20columbia/19_12736412_/?showcpo=ShowCpo&ncse=no&ursrc=pl&urp=5&urm=8&sprx=-2"
-
-        specs_dict = {}
-
+            url = "https://www.autotrader.ca/a/volkswagen/atlas%20cross%20sport/kelowna/british%20columbia/5_54065092_ct2004120103526706/?showcpo=ShowCpo&ncse=no&ursrc=hl&orup=34000_100_34162&sprx=-2,Turner"
+        
+        info_dict = {}
+        
         try:
             self.driver.get(url)
             WebDriverWait(self.driver, 10).until(
@@ -230,9 +231,13 @@ class AutotraderMainBot:
         specs_div_content = specs_div.get_attribute('outerHTML')
         specs_list = BeautifulSoup(specs_div_content, 'html.parser')
 
+        specs_dict = {}
         for index, li in enumerate(specs_list.find_all('li', {'class': 'list-item'})):
             key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
             specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
+
+        for field in self.LISTING_SPECS_FIELDS:
+            info_dict[field] = specs_dict.get(field, None)
 
         wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
         script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
@@ -240,15 +245,15 @@ class AutotraderMainBot:
         adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
         adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
         adBasicInfo = json.loads(adBasicInfo)
-        for field in self.LISTING_FIELDS:
-            specs_dict[field] = adBasicInfo.get(field, None)
-        return specs_dict
+        for field in self.LISTING_BASIC_INFO_FIELDS:
+            info_dict[field] = adBasicInfo.get(field, None)
+        return info_dict
 
         
 
 def main():
     bot = AutotraderMainBot()
-    bot.run(pages = 2)
+    bot.run(pages = 1)
     # bot.extract_listing_info()
 
 
