@@ -123,9 +123,13 @@ class AutotraderMainBot:
         while not pages or page < pages:
             snapshot_url = self.driver.current_url
 
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR))
-            )
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR))
+                )
+            except:
+                print("Failed to load page ", snapshot_url)
+                break
 
             main_divs = self.driver.find_elements(By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR)
 
@@ -137,6 +141,8 @@ class AutotraderMainBot:
 
             for listing in page_car_info:
                 listing_url = listing['listing_url']
+                if not listing_url:
+                    continue
                 # TODO: Check if listing already exists in database
                 listing_exists = False
                 if listing_exists:
@@ -217,7 +223,7 @@ class AutotraderMainBot:
             url = "https://www.autotrader.ca/a/volkswagen/atlas%20cross%20sport/kelowna/british%20columbia/5_54065092_ct2004120103526706/?showcpo=ShowCpo&ncse=no&ursrc=hl&orup=34000_100_34162&sprx=-2,Turner"
         
         info_dict = {}
-        
+
         try:
             self.driver.get(url)
             WebDriverWait(self.driver, 10).until(
@@ -239,14 +245,19 @@ class AutotraderMainBot:
         for field in self.LISTING_SPECS_FIELDS:
             info_dict[field] = specs_dict.get(field, None)
 
-        wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
-        script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
-        script_content = script.get_attribute('innerHTML')
-        adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
-        adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
-        adBasicInfo = json.loads(adBasicInfo)
-        for field in self.LISTING_BASIC_INFO_FIELDS:
-            info_dict[field] = adBasicInfo.get(field, None)
+        try:
+            wrapper = self.driver.find_element(By.ID, self.LISTING_WRAPPER_SELECTOR)
+            script = wrapper.find_elements(By.XPATH, self.LISTING_JS_SELECTOR)[1]
+            script_content = script.get_attribute('innerHTML')
+            adBasicInfo_match = re.search(r'"adBasicInfo":\s*({.*?})', script_content)
+            adBasicInfo = adBasicInfo_match.group(1) if adBasicInfo_match else None
+            adBasicInfo = json.loads(adBasicInfo)
+            for field in self.LISTING_BASIC_INFO_FIELDS:
+                info_dict[field] = adBasicInfo.get(field, None)
+        except:
+            for field in self.LISTING_BASIC_INFO_FIELDS:
+                info_dict[field] = None
+        
         return info_dict
 
         
