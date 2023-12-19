@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
@@ -31,9 +32,6 @@ class AutotraderMainBot:
             'description': ('.details', 'text'),
             'listing_url': ('.inner-link', 'href'),
             'dealer_name': ('div.seller-name', 'text')
-        }
-    LISTING_FIELDS = {
-            
         }
     
     def __init__(self, user_agent=USER_AGENT):
@@ -149,7 +147,7 @@ class AutotraderMainBot:
     def test(self):
         self.driver.get(self.STARTING_PAGE)
 
-        time.sleep(2)
+        # time.sleep(2)
 
         filename = self.create_filename()
         
@@ -170,7 +168,7 @@ class AutotraderMainBot:
             with open('sample_listing_source.html', 'w') as f:
                 f.write(self.driver.page_source)
             
-            time.sleep(50)
+            # time.sleep(50)
             break
             
             # self.append_to_file(filename, page_car_info)
@@ -194,23 +192,31 @@ class AutotraderMainBot:
         self.driver.quit()
 
     def test_listing(self):
-        listing_page = 'https://www.autotrader.ca/a/dodge/ram%201500%20pickup/salmon%20arm/british%20columbia/19_12737948_/?showcpo=ShowCpo&ncse=no&ursrc=pl&urp=2&urm=8&sprx=-2'
+        listing_page = 'https://www.autotrader.ca/a/bmw/4%20series/langley/british%20columbia/5_60855243_20110808063216984/?showcpo=ShowCpo&ncse=no&ursrc=xpl&urp=1&urm=8&sprx=-2'
         css_selector = '#specificationWidget'
         self.driver.get(listing_page)
         while True:
             WebDriverWait(self.driver, 10).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector))
+                EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
             )
 
-            main_divs = self.driver.find_elements(By.CSS_SELECTOR, css_selector)
+            main_div = self.driver.find_element(By.CSS_SELECTOR, css_selector)
+            html_content = main_div.get_attribute('outerHTML')
 
-            specs = []
-            for main_div in main_divs:
-                specs.append(self.extract_snapshot_info(main_div))
+            soup = BeautifulSoup(html_content, 'html.parser')
+            specs_list = soup.find('ul', {'id': 'sl-card-body'})
+            
+            specs_dict = {}
+
+            for index, li in enumerate(specs_list.find_all('li', {'class': 'list-item'})):
+                key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
+                specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
+            
+            for key, value in specs_dict.items():
+                print(f'{key}: {value}')
             
             with open('sample_listing_source.html', 'w') as f:
-                for element in main_divs:
-                    f.write(element.get_attribute('outerHTML') + '\n')
+                f.write(main_div.get_attribute('outerHTML') + '\n')
             
             break
         self.driver.quit()
@@ -219,7 +225,7 @@ class AutotraderMainBot:
 def main():
     bot = AutotraderMainBot()
     # bot.run(pages = 2)
-    bot.test()
+    bot.test_listing()
 
 
 if __name__ == "__main__":
