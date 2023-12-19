@@ -115,13 +115,12 @@ class AutotraderMainBot:
             
     def run(self, pages=None):
         self.driver.get(self.STARTING_PAGE)
-
-        time.sleep(2)
-
         filename = self.create_filename()
-        
         page = 0
-        while True:
+
+        while not pages or page < pages:
+            snapshot_url = self.driver.current_url
+
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR))
             )
@@ -133,9 +132,20 @@ class AutotraderMainBot:
                 page_car_info.append(self.extract_snapshot_info(main_div))
 
             self.output_snapshot_csv(filename, page_car_info)
-            
-            if pages and page >= pages:
-                break
+
+            for listing in page_car_info:
+                listing_url = listing['listing_url']
+                # TODO: Check if listing already exists in database
+                listing_exists = False
+                if listing_exists:
+                    # TODO: Get lowest listing price from database, if current listing price is lower, update lowest price
+                    continue
+                else:
+                    listing_info = self.extract_listing_info(listing_url)
+                    listing_info['price'] = listing['price']
+                    self.output_listing_csv(listing_info)
+
+            self.driver.get(snapshot_url)
 
             try:
                 WebDriverWait(self.driver, 10).until(
