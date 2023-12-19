@@ -13,6 +13,7 @@ from datetime import datetime
 from selenium.webdriver.common.by import By
 import csv
 import os
+from database import Database
 
 
 
@@ -29,29 +30,47 @@ class AutotraderMainBot:
     LISTING_JS_SELECTOR = './/script[@type="text/javascript"]'
     SNAPSHOT_FIELDS = {
             'price': ('.price-amount', 'text'),
-            'title': ('.h2-title .result-title .title-with-trim', 'text'),
-            'num_photos': ('.photo-count', 'text', 'strip'),
-            'photo_url': ('.main-photo img', 'data-original'),
-            'location': ('.proximity .proximity-text.overflow-ellipsis', 'text'),
-            'mileage': ('.odometer-proximity', 'text'),
-            'description': ('.details', 'text'),
-            'listing_url': ('.inner-link', 'href'),
-            'dealer_name': ('div.seller-name', 'text')
+            # 'title': ('.h2-title .result-title .title-with-trim', 'text'),
+            # 'num_photos': ('.photo-count', 'text'),
+            # 'photo_url': ('.main-photo img', 'data-original'),
+            # 'location': ('.proximity .proximity-text.overflow-ellipsis', 'text'),
+            # 'mileage': ('.odometer-proximity', 'text'),
+            # 'description': ('.details', 'text'),
+            'url': ('.inner-link', 'href'),
+            # 'dealer_name': ('div.seller-name', 'text')
         }
     LISTING_BASIC_INFO_FIELDS = {
-        "price": "original price",
+        "price": "original_price",
         "make": "make",
         "model": "model",
         "year": "year", 
         "vin": "vin", 
         "dealerCoName": "dealer", 
     }
-    LISTING_SPECS_FIELDS = ["Kilometres", "Status", "Trim", "Body Type", "Engine", "Cylinder", "Transmission", "Drivetrain", "Stock Number", "Exterior Colour", "Interior Colour", "Passengers", "Doors", "Fuel Type", "City Fuel Economy", "Hwy Fuel Economy"]
-    
-    def __init__(self, user_agent=USER_AGENT):
+    LISTING_SPECS_FIELDS = {
+        "Killometres": "kilometres",
+        "Status": "status",
+        "Trim": "trim",
+        "Body Type": "body_type",
+        "Engine": "engine",
+        "Cylinder": "cylinder",
+        "Transmission": "transmission",
+        "Drivetrain": "drivetrain",
+        "Stock Number": "stock_number",
+        "Exterior Colour": "exterior_colour",
+        "Interior Colour": "interior_colour",
+        "Passengers": "passengers",
+        "Doors": "doors",
+        "Fuel Type": "fuel_type",
+        "City Fuel Economy": "city_fuel_economy",
+        "Hwy Fuel Economy": "hwy_fuel_economy"
+    }
+
+    def __init__(self, db, user_agent=USER_AGENT):
         # initialize options
         options = webdriver.ChromeOptions()
         options.add_argument("start-maximized")
+        options.add_argument("--disable-javascript")
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
@@ -65,6 +84,7 @@ class AutotraderMainBot:
         driver = webdriver.Chrome(options=options)
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
         self.driver = driver
+        self.db = db
     
     @classmethod
     def create_filename(cls):
@@ -86,7 +106,24 @@ class AutotraderMainBot:
             if not file_exists:
                 writer.writeheader()  # Write header only once
                 
-            writer.writerows(data)
+            writer.writerows([data])
+
+    @staticmethod
+    def transform_data(data):
+        for key, value in data.items():
+            if value is None or value == '':
+                continue
+
+            print(key, value)
+            if key == 'price' or key == 'lowest_price' or key == 'original_price':
+                data[key] = int(value.replace('$', '').replace(',', ''))
+            elif key == 'kilometres':
+                data[key] = int(value.replace(',', '').replace('km', ''))
+            elif key == 'doors':
+                data[key] = int(value.replace(' doors', ''))
+            elif key == 'year' or key == 'cylinder' or key == 'passengers':
+                data[key] = int(value)
+        return data
 
     @staticmethod
     def output_listing_csv(data):
@@ -110,12 +147,10 @@ class AutotraderMainBot:
     @classmethod
     def extract_snapshot_info(cls, main_div):
         car_info = {}
-        for key, (selector, attribute, *extras) in cls.SNAPSHOT_FIELDS.items():
+        for key, (selector, attribute) in cls.SNAPSHOT_FIELDS.items():
             try:
                 element = main_div.find_element(By.CSS_SELECTOR, selector)
                 value = element.text if attribute == 'text' else element.get_attribute(attribute)
-                if extras and extras[0] == 'strip':
-                    value = value.strip()
                 car_info[key] = value
             except:
                 car_info[key] = None
@@ -144,10 +179,12 @@ class AutotraderMainBot:
             for main_div in main_divs:
                 page_car_info.append(self.extract_snapshot_info(main_div))
 
-            self.output_snapshot_csv(filename, page_car_info)
-
             for listing in page_car_info:
-                listing_url = listing['listing_url']
+                page_car_info = self.transform_data(listing)
+                self.output_snapshot_csv(filename, listing)
+                self.db.insert_scraped_listing(listing)
+
+                listing_url = listing['url']
                 if not listing_url:
                     continue
                 # TODO: Check if listing already exists in database
@@ -158,7 +195,9 @@ class AutotraderMainBot:
                 else:
                     listing_info = self.extract_listing_info(listing_url)
                     if listing_info:
+                        listing_info = self.transform_data(listing_info)
                         self.output_listing_csv(listing_info)
+                        self.db.insert_listing_details(listing_info)
 
             self.driver.get(snapshot_url)
 
@@ -197,7 +236,7 @@ class AutotraderMainBot:
             for main_div in main_divs:
                 page_car_info.append(self.extract_snapshot_info(main_div))
 
-            # self.driver.get(page_car_info[0]['listing_url'])
+            # self.driver.get(page_car_info[0]['url'])
             
             with open('sample_listing_source.html', 'w') as f:
                 f.write(self.driver.page_source)
@@ -227,7 +266,7 @@ class AutotraderMainBot:
 
     def extract_listing_info(self, url=None):
         if not url:
-            url = "https://www.autotrader.ca/a/volkswagen/atlas%20cross%20sport/kelowna/british%20columbia/5_54065092_ct2004120103526706/?showcpo=ShowCpo&ncse=no&ursrc=hl&orup=34000_100_34162&sprx=-2,Turner"
+            url = "https://www.autotrader.ca/a/ford/edge/mission/british%20columbia/5_55566809_bs200442110928/?showcpo=ShowCpo&ncse=no&ursrc=hl&orup=33848_100_34217&sprx=-2"
         
         info_dict = {}
         info_dict['url'] = url
@@ -252,12 +291,12 @@ class AutotraderMainBot:
             for key, value in self.LISTING_BASIC_INFO_FIELDS.items():
                 info_dict[value] = adBasicInfo.get(key, None)
                 if key == 'price':
-                    info_dict['lowest price'] = info_dict[value]
+                    info_dict['lowest_price'] = info_dict[value]
         except:
             for key, value in self.LISTING_BASIC_INFO_FIELDS.items():
                 info_dict[value] = None
                 if key == 'price':
-                    info_dict['lowest price'] = None
+                    info_dict['lowest_price'] = None
 
         # Extract other specs
         specs_div = self.driver.find_element(By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR)
@@ -269,15 +308,18 @@ class AutotraderMainBot:
             key = li.find('span', {'id': f'spec-key-{index}'}).text.strip()
             specs_dict[key] = li.find('span', {'id': f'spec-value-{index}'}).text.strip()
 
-        for field in self.LISTING_SPECS_FIELDS:
-            info_dict[field.lower()] = specs_dict.get(field, None)
+        for key, value in self.LISTING_SPECS_FIELDS.items():
+            info_dict[value] = specs_dict.get(key, None)
         self.output_listing_csv(info_dict)
+        with open('sample_listing_source.html', 'w') as f:
+                f.write(self.driver.page_source)
         return info_dict
 
         
 
 def main():
-    bot = AutotraderMainBot()
+    db = Database()
+    bot = AutotraderMainBot(db)
     # bot.run(pages = 1)
     bot.extract_listing_info()
 
