@@ -21,7 +21,7 @@ class AutotraderMainBot:
     CAR_INFO_CSS_SELECTOR = '#result-item-inner-div'
     NEXT_PAGE_CSS_SELECTOR = 'a.last-page-link'
     RESULTS_FOLDER = 'scraped_data'
-    FIELDS = {
+    SNAPSHOT_FIELDS = {
             'price': ('.price-amount', 'text'),
             'title': ('.h2-title .result-title .title-with-trim', 'text'),
             'num_photos': ('.photo-count', 'text', 'strip'),
@@ -31,6 +31,9 @@ class AutotraderMainBot:
             'description': ('.details', 'text'),
             'listing_url': ('.inner-link', 'href'),
             'dealer_name': ('div.seller-name', 'text')
+        }
+    LISTING_FIELDS = {
+            
         }
     
     def __init__(self, user_agent=USER_AGENT):
@@ -61,7 +64,7 @@ class AutotraderMainBot:
         file_exists = os.path.isfile(filename)
         
         with open(filename, 'a', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=AutotraderMainBot.FIELDS.keys())
+            writer = csv.DictWriter(f, fieldnames=AutotraderMainBot.SNAPSHOT_FIELDS.keys())
             
             if not file_exists:
                 writer.writeheader()  # Write header only once
@@ -69,9 +72,24 @@ class AutotraderMainBot:
             writer.writerows(data)
     
     @classmethod
-    def extract_info(cls, main_div):
+    def extract_snapshot_info(cls, main_div):
         car_info = {}
-        for key, (selector, attribute, *extras) in cls.FIELDS.items():
+        for key, (selector, attribute, *extras) in cls.SNAPSHOT_FIELDS.items():
+            try:
+                element = main_div.find_element(By.CSS_SELECTOR, selector)
+                value = element.text if attribute == 'text' else element.get_attribute(attribute)
+                if extras and extras[0] == 'strip':
+                    value = value.strip()
+                car_info[key] = value
+            except:
+                car_info[key] = None
+                
+        return car_info
+    
+    @classmethod
+    def extract_listing_info(cls, main_div):
+        car_info = {}
+        for key, (selector, attribute, *extras) in cls.SNAPSHOT_FIELDS.items():
             try:
                 element = main_div.find_element(By.CSS_SELECTOR, selector)
                 value = element.text if attribute == 'text' else element.get_attribute(attribute)
@@ -100,7 +118,7 @@ class AutotraderMainBot:
 
             page_car_info = []
             for main_div in main_divs:
-                page_car_info.append(self.extract_info(main_div))
+                page_car_info.append(self.extract_snapshot_info(main_div))
 
             self.append_to_file(filename, page_car_info)
             
@@ -140,7 +158,7 @@ class AutotraderMainBot:
 
             page_car_info = []
             for main_div in main_divs:
-                page_car_info.append(self.extract_info(main_div))
+                page_car_info.append(self.extract_snapshot_info(main_div))
 
             self.driver.get(page_car_info[0]['listing_url'])
             
@@ -169,7 +187,28 @@ class AutotraderMainBot:
             #     break
 
         self.driver.quit()
-        
+
+    def test_listing(self):
+        listing_page = 'https://www.autotrader.ca/a/dodge/ram%201500%20pickup/salmon%20arm/british%20columbia/19_12737948_/?showcpo=ShowCpo&ncse=no&ursrc=pl&urp=2&urm=8&sprx=-2'
+        css_selector = '#specificationWidget'
+        self.driver.get(listing_page)
+        while True:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector))
+            )
+
+            main_divs = self.driver.find_elements(By.CSS_SELECTOR, css_selector)
+
+            specs = []
+            for main_div in main_divs:
+                specs.append(self.extract_snapshot_info(main_div))
+            
+            with open('sample_listing_source.html', 'w') as f:
+                for element in main_divs:
+                    f.write(element.get_attribute('outerHTML') + '\n')
+            
+            break
+        self.driver.quit()
         
 
 def main():
