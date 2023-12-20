@@ -20,15 +20,16 @@ class Database:
     self.supabase.table(self.LISTING_TABLE_NAME).insert(data).execute()
 
   def get_all_listing_urls(self):
-    result = self.supabase.table(self.SNAPSHOT_TABLE_NAME).select("url").execute()
+    result = self.supabase.table(self.LISTING_TABLE_NAME).select("url").execute()
     urls = [item["url"] for item in result.data]
     return urls
   
+  def update_listing_price(self, url, price):
+    self.supabase.table(self.LISTING_TABLE_NAME).update({"lowest_price": price}).eq("url", url).execute()
+  
 def main():
   db = Database()
-  new_listing = {"url": "123", "price": 123}
-  db.insert_scraped_listing(new_listing)
-  print(db.get_all_listing_urls())
+  db.update_listing_price("https://www.autotrader.ca/a/acura/ilx/surrey/british%20columbia/19_12745170", 1000)
 
 if __name__ == "__main__":
   main()
