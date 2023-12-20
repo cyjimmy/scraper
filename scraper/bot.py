@@ -66,27 +66,27 @@ class AutotraderMainBot:
         "Hwy Fuel Economy": "hwy_fuel_economy"
     }
 
-    def __init__(self, db, user_agent=USER_AGENT):
+    def __init__(self, db):
         # initialize options
         options = webdriver.ChromeOptions()
         options.add_argument("start-maximized")
-        options.add_argument("--disable-javascript")
         options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
         options.add_experimental_option(
             "prefs", {
                 "profile.managed_default_content_settings.images": 2,
             }
         )
-        
+        self.options = options
+
         # initialize driver
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(15)
-        driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
-        self.driver = driver
+        self.driver = webdriver.Chrome(options=options)
+        self.driver.set_page_load_timeout(15)
         self.db = db
+
+    def reset_driver(self):
+        self.driver.quit()
+        self.driver = webdriver.Chrome(options=self.options)
+        self.driver.set_page_load_timeout(15)
     
     @classmethod
     def create_filename(cls):
@@ -179,6 +179,7 @@ class AutotraderMainBot:
         log_file_name = f'logs_{current_time}.txt'
 
         while not end_page or current_page < end_page:
+            self.reset_driver()
             snapshot_url = self.STARTING_PAGE.replace('rcs=0', f'rcs={(current_page - 1) * self.LISTING_PER_PAGE}')
             self.create_log_file(f'Page: {current_page}, url: {snapshot_url}', log_file_name)
             try:
@@ -210,8 +211,7 @@ class AutotraderMainBot:
                 if not listing_url:
                     continue
 
-                existing_listings = self.db.get_all_listing_urls()
-                if listing_url in existing_listings:
+                if self.db.check_url_exist(listing_url):
                     print("Listing already exists...")
                     self.db.update_listing_price(listing_url, listing['price'])
                     continue
@@ -350,7 +350,7 @@ class AutotraderMainBot:
 def main():
     db = Database()
     bot = AutotraderMainBot(db)
-    bot.run(current_page=1, page_count=10)
+    bot.run(current_page=30, page_count=10)
     # bot.extract_listing_info()
 
 
