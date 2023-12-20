@@ -73,6 +73,7 @@ class AutotraderMainBot:
         options.add_argument("--disable-javascript")
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument('--headless')
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_experimental_option(
@@ -83,7 +84,7 @@ class AutotraderMainBot:
         
         # initialize driver
         driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(5)
+        driver.set_page_load_timeout(15)
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
         self.driver = driver
         self.db = db
