@@ -124,6 +124,11 @@ class AutotraderMainBot:
                 data[key] = int(value)
             elif key == 'make' or key == 'model' or key == 'fuel_type' or key == 'exterior_colour' or key == 'interior_colour':
                 data[key] = value.lower()
+            elif key == 'url':
+                pattern = re.compile(r'(\d+_\d+)')
+                match = pattern.search(value)
+                if match:
+                    data[key] = value[:match.end()]
 
     @staticmethod
     def output_listing_csv(data):
