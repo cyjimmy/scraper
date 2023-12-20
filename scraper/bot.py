@@ -16,12 +16,11 @@ import os
 from database import Database
 
 
-
 class AutotraderMainBot:
     WEBSITE_NAME = "autotrader"
     RESULTS_FOLDER = 'scraped_data'
     LISTING_FILE_NAME = 'listings.csv'
-    STARTING_PAGE = "https://www.autotrader.ca/cars/bc/?rcp=100&rcs=33800&srt=9&prx=-2&prv=British%20Columbia&loc=bc&hprc=True&wcp=True&sts=Used&inMarket=advancedSearch"
+    STARTING_PAGE = "https://www.autotrader.ca/cars/bc/?rcp=100&rcs=0&srt=9&prx=-2&prv=British%20Columbia&loc=bc&hprc=True&wcp=True&sts=Used&inMarket=advancedSearch"
     USER_AGENT =  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.53 Safari/537.36'
     SNAPSHOT_RESULTS_SELECTOR = '#result-item-inner-div'
     SNAPSHOT_NEXT_PAGE_SELECTOR = 'a.last-page-link'
@@ -45,10 +44,10 @@ class AutotraderMainBot:
         "model": "model",
         "year": "year", 
         "vin": "vin", 
-        "dealerCoName": "dealer", 
+        "dealerCoName": "dealer"       
     }
     LISTING_SPECS_FIELDS = {
-        "Killometres": "kilometres",
+        "Kilometres": "kilometres",
         "Status": "status",
         "Trim": "trim",
         "Body Type": "body_type",
@@ -114,7 +113,7 @@ class AutotraderMainBot:
             if value is None or value == '':
                 continue
 
-            print(key, value)
+            # print(key, value)
             if key == 'price' or key == 'lowest_price' or key == 'original_price':
                 data[key] = int(value.replace('$', '').replace(',', ''))
             elif key == 'kilometres':
@@ -123,7 +122,8 @@ class AutotraderMainBot:
                 data[key] = int(value.replace(' doors', ''))
             elif key == 'year' or key == 'cylinder' or key == 'passengers':
                 data[key] = int(value)
-        return data
+            elif key == 'make' or key == 'model' or key == 'fuel_type' or key == 'exterior_colour' or key == 'interior_colour':
+                data[key] = value.lower()
 
     @staticmethod
     def output_listing_csv(data):
@@ -135,7 +135,7 @@ class AutotraderMainBot:
         file_exists = os.path.isfile(output_path)
 
         with open(output_path, 'a', newline='') as csvfile:
-            print("Writing to file")
+            # print("Writing to file")
             fieldnames = data.keys()
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -180,22 +180,23 @@ class AutotraderMainBot:
                 page_car_info.append(self.extract_snapshot_info(main_div))
 
             for listing in page_car_info:
-                page_car_info = self.transform_data(listing)
+                self.transform_data(listing)
                 self.output_snapshot_csv(filename, listing)
                 self.db.insert_scraped_listing(listing)
 
                 listing_url = listing['url']
                 if not listing_url:
                     continue
-                # TODO: Check if listing already exists in database
-                listing_exists = False
-                if listing_exists:
-                    # TODO: Get lowest listing price from database, if current listing price is lower, update lowest price
+
+                existing_listings = self.db.get_all_listing_urls()
+                if listing_url in existing_listings:
+                    print("Listing already exists...")
+                    self.db.update_listing_price(listing_url, listing['price'])
                     continue
                 else:
                     listing_info = self.extract_listing_info(listing_url)
                     if listing_info:
-                        listing_info = self.transform_data(listing_info)
+                        self.transform_data(listing_info)
                         self.output_listing_csv(listing_info)
                         self.db.insert_listing_details(listing_info)
 
@@ -310,9 +311,9 @@ class AutotraderMainBot:
 
         for key, value in self.LISTING_SPECS_FIELDS.items():
             info_dict[value] = specs_dict.get(key, None)
-        self.output_listing_csv(info_dict)
-        with open('sample_listing_source.html', 'w') as f:
-                f.write(self.driver.page_source)
+        # self.output_listing_csv(info_dict)
+        # with open('sample_listing_source.html', 'w') as f:
+        #         f.write(self.driver.page_source)
         return info_dict
 
         
@@ -320,8 +321,8 @@ class AutotraderMainBot:
 def main():
     db = Database()
     bot = AutotraderMainBot(db)
-    # bot.run(pages = 1)
-    bot.extract_listing_info()
+    bot.run(pages = 1)
+    # bot.extract_listing_info()
 
 
 if __name__ == "__main__":
