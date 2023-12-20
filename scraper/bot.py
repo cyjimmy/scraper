@@ -15,8 +15,6 @@ import csv
 import os
 from database import Database
 
-listing_count = []
-
 
 class AutotraderMainBot:
     WEBSITE_NAME = "autotrader"
@@ -74,6 +72,7 @@ class AutotraderMainBot:
         options.add_argument("start-maximized")
         options.add_argument("--disable-javascript")
         options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument("--disable-dev-shm-usage")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_experimental_option(
@@ -164,14 +163,24 @@ class AutotraderMainBot:
                 car_info[key] = None
                 
         return car_info
+    
+    @staticmethod
+    def create_log_file(url, filename):
+        root_dir = os.path.dirname(os.path.abspath(__file__))
+        output_path = os.path.join(root_dir, filename)
+        with open(output_path, 'a', newline='') as f:
+            f.write(url + '\n')
             
-    def run(self, pages=None):
-        self.driver.get(self.STARTING_PAGE)
+    def run(self, current_page=1, page_count=None):
         filename = self.create_filename()
-        page = 0
+        end_page = current_page + page_count if page_count else None
+        current_time = datetime.now().strftime('%Y-%m-%d_%H_%M')
+        log_file_name = f'logs_{current_time}.txt'
 
-        while not pages or page < pages:
-            snapshot_url = self.STARTING_PAGE.replace('rcs=0', f'rcs={page * self.LISTING_PER_PAGE}')
+        while not end_page or current_page < end_page:
+            snapshot_url = self.STARTING_PAGE.replace('rcs=0', f'rcs={(current_page - 1) * self.LISTING_PER_PAGE}')
+            self.create_log_file(f'Page: {current_page}, url: {snapshot_url}', log_file_name)
+            self.driver.get(snapshot_url)
 
             try:
                 WebDriverWait(self.driver, 10).until(
@@ -182,7 +191,6 @@ class AutotraderMainBot:
                 break
 
             main_divs = self.driver.find_elements(By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR)
-            listing_count.append(len(main_divs))
 
             page_car_info = []
             for main_div in main_divs:
@@ -194,6 +202,7 @@ class AutotraderMainBot:
                 self.db.insert_scraped_listing(listing)
 
                 listing_url = listing['url']
+                self.create_log_file(f'\t\t\t{listing_url}', log_file_name)
                 if not listing_url:
                     continue
 
@@ -218,7 +227,7 @@ class AutotraderMainBot:
                 next_link = self.driver.find_element(By.CSS_SELECTOR, self.SNAPSHOT_NEXT_PAGE_SELECTOR)
                 self.driver.execute_script("arguments[0].scrollIntoView();", next_link)
                 print("Clicking next link")
-                page += 1
+                current_page += 1
                 next_link.click()
             except Exception as e:
                 print(e)
@@ -287,6 +296,7 @@ class AutotraderMainBot:
                 EC.presence_of_element_located((By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR))
             )
         except Exception as e:
+            print(e)
             print("Failed to load listing page ", url)
             return None
         
@@ -330,8 +340,7 @@ class AutotraderMainBot:
 def main():
     db = Database()
     bot = AutotraderMainBot(db)
-    bot.run(pages = 5)
-    print(listing_count)
+    bot.run(current_page=1, page_count=10)
     # bot.extract_listing_info()
 
 
