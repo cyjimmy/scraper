@@ -15,12 +15,15 @@ import csv
 import os
 from database import Database
 
+listing_count = []
+
 
 class AutotraderMainBot:
     WEBSITE_NAME = "autotrader"
     RESULTS_FOLDER = 'scraped_data'
     LISTING_FILE_NAME = 'listings.csv'
-    STARTING_PAGE = "https://www.autotrader.ca/cars/bc/?rcp=100&rcs=0&srt=9&prx=-2&prv=British%20Columbia&loc=bc&hprc=True&wcp=True&sts=Used&inMarket=advancedSearch"
+    LISTING_PER_PAGE = 100
+    STARTING_PAGE = f"https://www.autotrader.ca/cars/bc/?rcp={LISTING_PER_PAGE}&rcs=0&srt=9&prx=-2&prv=British%20Columbia&loc=bc&hprc=True&wcp=True&sts=Used&inMarket=advancedSearch"
     USER_AGENT =  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.53 Safari/537.36'
     SNAPSHOT_RESULTS_SELECTOR = '#result-item-inner-div'
     SNAPSHOT_NEXT_PAGE_SELECTOR = 'a.last-page-link'
@@ -168,7 +171,7 @@ class AutotraderMainBot:
         page = 0
 
         while not pages or page < pages:
-            snapshot_url = self.driver.current_url
+            snapshot_url = self.STARTING_PAGE.replace('rcs=0', f'rcs={page * self.LISTING_PER_PAGE}')
 
             try:
                 WebDriverWait(self.driver, 10).until(
@@ -179,6 +182,7 @@ class AutotraderMainBot:
                 break
 
             main_divs = self.driver.find_elements(By.CSS_SELECTOR, self.SNAPSHOT_RESULTS_SELECTOR)
+            listing_count.append(len(main_divs))
 
             page_car_info = []
             for main_div in main_divs:
@@ -204,7 +208,7 @@ class AutotraderMainBot:
                         self.transform_data(listing_info)
                         self.output_listing_csv(listing_info)
                         self.db.insert_listing_details(listing_info)
-
+            
             self.driver.get(snapshot_url)
 
             try:
@@ -326,7 +330,8 @@ class AutotraderMainBot:
 def main():
     db = Database()
     bot = AutotraderMainBot(db)
-    bot.run(pages = 1)
+    bot.run(pages = 5)
+    print(listing_count)
     # bot.extract_listing_info()
 
 
