@@ -83,6 +83,7 @@ class AutotraderMainBot:
         
         # initialize driver
         driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(5)
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
         self.driver = driver
         self.db = db
@@ -180,7 +181,10 @@ class AutotraderMainBot:
         while not end_page or current_page < end_page:
             snapshot_url = self.STARTING_PAGE.replace('rcs=0', f'rcs={(current_page - 1) * self.LISTING_PER_PAGE}')
             self.create_log_file(f'Page: {current_page}, url: {snapshot_url}', log_file_name)
-            self.driver.get(snapshot_url)
+            try:
+                self.driver.get(snapshot_url)
+            except:
+                pass
 
             try:
                 WebDriverWait(self.driver, 10).until(
@@ -218,7 +222,10 @@ class AutotraderMainBot:
                         self.output_listing_csv(listing_info)
                         self.db.insert_listing_details(listing_info)
             
-            self.driver.get(snapshot_url)
+            try:
+                self.driver.get(snapshot_url)
+            except:
+                pass
 
             try:
                 WebDriverWait(self.driver, 10).until(
@@ -292,6 +299,9 @@ class AutotraderMainBot:
 
         try:
             self.driver.get(url)
+        except:
+            pass
+        try:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, self.LISTING_SPECS_SELECTOR))
             )
